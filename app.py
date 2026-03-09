@@ -99,6 +99,19 @@ def 신규_고객ID() -> str:
     return f"C{(max(번호목록) + 1):03d}" if 번호목록 else "C001"
 
 
+def 전화번호_포맷(번호: str) -> str:
+    """숫자만 추출 후 한국 전화번호 형식(010-xxxx-xxxx)으로 변환"""
+    digits = ''.join(filter(str.isdigit, 번호))
+    if len(digits) == 11:  # 010-xxxx-xxxx
+        return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+    elif len(digits) == 10:  # 02-xxxx-xxxx 또는 0xx-xxx-xxxx
+        if digits.startswith('02'):
+            return f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
+        else:
+            return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+    return 번호  # 형식이 맞지 않으면 입력값 그대로 반환
+
+
 def 고객_추가(고객명, 휴대폰번호, 성별="", 나이대="", 메모=""):
     _post("customers", {
         "customer_id":   신규_고객ID(),
@@ -341,9 +354,14 @@ with 탭1:
         elif not 휴대폰번호.strip():
             st.error("휴대폰 번호를 입력해주세요.")
         else:
-            고객_추가(고객명, 휴대폰번호, 성별, 나이대, 메모)
-            st.success(f"'{고객명}' 고객이 등록되었습니다!")
-            st.balloons()
+            포맷번호 = 전화번호_포맷(휴대폰번호)
+            digits = ''.join(filter(str.isdigit, 휴대폰번호))
+            if len(digits) not in (10, 11):
+                st.error("올바른 전화번호를 입력해주세요. 예: 010-1234-5678 또는 01012345678")
+            else:
+                고객_추가(고객명, 포맷번호, 성별, 나이대, 메모)
+                st.success(f"'{고객명}' 고객이 등록되었습니다! (번호: {포맷번호})")
+                st.balloons()
 
     st.divider()
     st.subheader("등록된 고객 현황")
