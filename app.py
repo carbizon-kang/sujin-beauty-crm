@@ -169,6 +169,32 @@ def 시술이력_삭제(이력ID):
 
 
 # ─────────────────────────────────────────────
+# 데이터 함수 - 앱 설정 (비밀번호)
+# ─────────────────────────────────────────────
+
+def _get_app_password() -> str:
+    """Supabase app_settings 테이블에서 비밀번호를 가져옵니다. 없으면 secrets 기본값 사용."""
+    try:
+        rows = _get("app_settings", {"select": "value", "key": "eq.app_password"})
+        if rows and rows[0].get("value"):
+            return rows[0]["value"]
+    except:
+        pass
+    return st.secrets.get("APP_PASSWORD", "sujin1234")
+
+
+def _set_app_password(new_pw: str) -> bool:
+    """Supabase app_settings 테이블에 비밀번호를 저장합니다."""
+    hdrs = {**_headers(), "Prefer": "resolution=merge-duplicates,return=representation"}
+    res = requests.post(
+        f"{SUPABASE_URL}/rest/v1/app_settings",
+        headers=hdrs,
+        json={"key": "app_password", "value": new_pw},
+    )
+    return res.ok
+
+
+# ─────────────────────────────────────────────
 # 페이지 설정
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="수진뷰티 고객 관리", page_icon="💄", layout="wide")
@@ -187,7 +213,7 @@ if not st.session_state.authenticated:
         st.subheader("🔐 로그인")
         pw = st.text_input("비밀번호를 입력하세요", type="password", placeholder="비밀번호")
         if st.button("로그인", use_container_width=True, type="primary"):
-            if pw == st.secrets.get("APP_PASSWORD", "sujin1234"):
+            if pw == _get_app_password():
                 st.session_state.authenticated = True
                 st.rerun()
             else:
@@ -196,10 +222,28 @@ if not st.session_state.authenticated:
 
 st.title("💄 수진뷰티 고객 관리 시스템")
 
-# 로그아웃 버튼 (우상단)
-col_title, col_logout = st.columns([8, 1])
+# 로그아웃 / 비밀번호 변경 (우상단)
+col_title, col_pw, col_logout = st.columns([7, 1.5, 1])
+with col_pw:
+    with st.popover("🔑 비밀번호 변경"):
+        with st.form("비밀번호변경폼"):
+            현재pw = st.text_input("현재 비밀번호", type="password")
+            새pw   = st.text_input("새 비밀번호", type="password")
+            확인pw = st.text_input("새 비밀번호 확인", type="password")
+            변경버튼 = st.form_submit_button("변경", type="primary", use_container_width=True)
+        if 변경버튼:
+            if 현재pw != _get_app_password():
+                st.error("현재 비밀번호가 틀렸습니다.")
+            elif len(새pw) < 4:
+                st.error("비밀번호는 4자 이상이어야 합니다.")
+            elif 새pw != 확인pw:
+                st.error("새 비밀번호가 일치하지 않습니다.")
+            elif _set_app_password(새pw):
+                st.success("비밀번호가 변경되었습니다!")
+            else:
+                st.error("변경 실패. Supabase app_settings 테이블을 확인하세요.")
 with col_logout:
-    if st.button("로그아웃"):
+    if st.button("로그아웃", use_container_width=True):
         st.session_state.authenticated = False
         st.rerun()
 

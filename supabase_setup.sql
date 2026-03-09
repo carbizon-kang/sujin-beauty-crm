@@ -15,7 +15,6 @@ create table if not exists customers (
   memo          text default ''
 );
 
--- 2. 시술이력 테이블
 create table if not exists treatments (
   id              bigserial primary key,
   treatment_id    text unique not null,
@@ -43,7 +42,14 @@ insert into treatment_types (type_name, sort_order) values
   ('제모', 9), ('눈썹 정리', 10), ('기타', 11)
 on conflict (type_name) do nothing;
 
--- 5. RLS 비활성화 (개인 매장 전용 앱)
-alter table customers      disable row level security;
-alter table treatments     disable row level security;
+-- 5. 앱 설정 테이블 (비밀번호 등 설정값 저장)
+create table if not exists app_settings (
+  key   text primary key,
+  value text default ''
+);
+
+-- 6. RLS 비활성화 (개인 매장 전용 앱)
+alter table customers       disable row level security;
+alter table treatments      disable row level security;
 alter table treatment_types disable row level security;
+alter table app_settings    disable row level security;
