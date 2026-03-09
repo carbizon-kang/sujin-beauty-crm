@@ -172,10 +172,40 @@ def 시술이력_삭제(이력ID):
 # 페이지 설정
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="수진뷰티 고객 관리", page_icon="💄", layout="wide")
+
+# ─────────────────────────────────────────────
+# 로그인 체크
+# ─────────────────────────────────────────────
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("💄 수진뷰티 고객 관리 시스템")
+    st.divider()
+    col_center = st.columns([1, 1, 1])[1]
+    with col_center:
+        st.subheader("🔐 로그인")
+        pw = st.text_input("비밀번호를 입력하세요", type="password", placeholder="비밀번호")
+        if st.button("로그인", use_container_width=True, type="primary"):
+            if pw == st.secrets.get("APP_PASSWORD", "sujin1234"):
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("비밀번호가 올바르지 않습니다.")
+    st.stop()
+
 st.title("💄 수진뷰티 고객 관리 시스템")
+
+# 로그아웃 버튼 (우상단)
+col_title, col_logout = st.columns([8, 1])
+with col_logout:
+    if st.button("로그아웃"):
+        st.session_state.authenticated = False
+        st.rerun()
+
 st.divider()
 
-탭1, 탭2, 탭3, 탭4, 탭5, 탭6, 탭7 = st.tabs([
+탭1, 탭2, 탭3, 탭4, 탭5, 탭6, 탭7, 탭8 = st.tabs([
     "👤 고객 등록",
     "✂️ 시술 이력 등록",
     "🔍 개인별 조회",
@@ -183,6 +213,7 @@ st.divider()
     "📋 고객 전체 리스트",
     "⚙️ 시술종류 관리",
     "📱 단체문자",
+    "📥 데이터 가져오기",
 ])
 
 
@@ -626,3 +657,164 @@ with 탭7:
             st.download_button("발송 목록 CSV 다운로드", data=csv발송,
                 file_name=f"수진뷰티_문자발송_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv")
+
+
+# ════════════════════════════════════════════
+# 탭8: 데이터 가져오기 (엑셀 업로드)
+# ════════════════════════════════════════════
+with 탭8:
+    st.subheader("📥 기존 데이터 가져오기 (엑셀 업로드)")
+    st.info("기존 프로그램에서 사용하던 엑셀 파일을 업로드하면 자동으로 DB에 등록됩니다.")
+
+    가져오기종류 = st.radio("가져올 데이터 선택", ["👤 고객 명단", "✂️ 시술 이력"], horizontal=True)
+
+    # ── 양식 다운로드 ──
+    with st.expander("📄 엑셀 양식 다운로드 (양식에 맞게 작성 후 업로드)"):
+        if 가져오기종류 == "👤 고객 명단":
+            샘플 = pd.DataFrame({
+                "고객명": ["홍길동", "김수진"],
+                "휴대폰번호": ["010-1234-5678", "010-9876-5432"],
+                "성별": ["남", "여"],
+                "나이대": ["30대", "40대"],
+                "메모": ["드라이 선호", ""],
+            })
+        else:
+            샘플 = pd.DataFrame({
+                "고객명": ["홍길동", "김수진"],
+                "방문일자": ["2025-01-15", "2025-02-20"],
+                "시술종류": ["커트", "염색"],
+                "사용제품": ["", "엘라스틴 7제"],
+                "단가": [15000, 80000],
+                "메모": ["", ""],
+            })
+        양식csv = 샘플.to_csv(index=False).encode("utf-8-sig")
+        파일명 = "고객명단_양식.csv" if 가져오기종류 == "👤 고객 명단" else "시술이력_양식.csv"
+        st.dataframe(샘플, use_container_width=True, hide_index=True)
+        st.download_button("양식 CSV 다운로드", data=양식csv, file_name=파일명, mime="text/csv")
+
+    st.divider()
+
+    # ── 파일 업로드 ──
+    업로드파일 = st.file_uploader(
+        "엑셀(.xlsx) 또는 CSV(.csv) 파일 업로드",
+        type=["xlsx", "xls", "csv"],
+        help="첫 번째 시트의 데이터를 읽습니다."
+    )
+
+    if 업로드파일:
+        try:
+            if 업로드파일.name.endswith(".csv"):
+                df_upload = pd.read_csv(업로드파일, dtype=str).fillna("")
+            else:
+                df_upload = pd.read_excel(업로드파일, dtype=str).fillna("")
+            st.success(f"파일 로드 완료: {len(df_upload)}행")
+        except Exception as e:
+            st.error(f"파일 읽기 오류: {e}")
+            df_upload = None
+
+        if df_upload is not None and not df_upload.empty:
+            st.subheader("미리보기 (상위 5행)")
+            st.dataframe(df_upload.head(), use_container_width=True, hide_index=True)
+
+            st.subheader("컬럼 매핑")
+            컬럼목록 = ["(사용안함)"] + list(df_upload.columns)
+
+            def 컬럼선택(라벨, 기본후보들):
+                """업로드 파일 컬럼 중 기본 후보 이름과 일치하는 컬럼을 자동 선택"""
+                for 후보 in 기본후보들:
+                    if 후보 in df_upload.columns:
+                        return st.selectbox(라벨, 컬럼목록, index=컬럼목록.index(후보))
+                return st.selectbox(라벨, 컬럼목록)
+
+            if 가져오기종류 == "👤 고객 명단":
+                col1, col2 = st.columns(2)
+                with col1:
+                    col_name  = 컬럼선택("고객명 컬럼 *", ["고객명", "이름", "성함"])
+                    col_phone = 컬럼선택("휴대폰번호 컬럼 *", ["휴대폰번호", "전화번호", "연락처", "휴대폰"])
+                    col_gender = 컬럼선택("성별 컬럼", ["성별"])
+                with col2:
+                    col_age  = 컬럼선택("나이대 컬럼", ["나이대", "연령대"])
+                    col_memo = 컬럼선택("메모 컬럼", ["메모", "특이사항"])
+
+                if st.button("고객 명단 가져오기", type="primary", use_container_width=True):
+                    if col_name == "(사용안함)" or col_phone == "(사용안함)":
+                        st.error("고객명과 휴대폰번호 컬럼은 반드시 선택해야 합니다.")
+                    else:
+                        성공, 실패, 중복 = 0, 0, 0
+                        기존고객 = 고객_불러오기()
+                        기존번호목록 = 기존고객["휴대폰번호"].tolist() if not 기존고객.empty else []
+
+                        진행바 = st.progress(0)
+                        for i, row in df_upload.iterrows():
+                            이름 = str(row.get(col_name, "")).strip()
+                            번호 = str(row.get(col_phone, "")).strip()
+                            if not 이름 or not 번호:
+                                실패 += 1
+                                continue
+                            if 번호 in 기존번호목록:
+                                중복 += 1
+                                continue
+                            성별v  = str(row.get(col_gender, "")).strip() if col_gender != "(사용안함)" else ""
+                            나이대v = str(row.get(col_age,   "")).strip() if col_age    != "(사용안함)" else ""
+                            메모v   = str(row.get(col_memo,  "")).strip() if col_memo   != "(사용안함)" else ""
+                            고객_추가(이름, 번호, 성별v, 나이대v, 메모v)
+                            기존번호목록.append(번호)
+                            성공 += 1
+                            진행바.progress((i + 1) / len(df_upload))
+
+                        st.success(f"가져오기 완료! ✅ 등록: {성공}명  |  ⚠️ 중복 건너뜀: {중복}명  |  ❌ 실패: {실패}명")
+                        st.rerun()
+
+            else:  # 시술 이력
+                col1, col2 = st.columns(2)
+                with col1:
+                    col_name  = 컬럼선택("고객명 컬럼 *", ["고객명", "이름", "성함"])
+                    col_date  = 컬럼선택("방문일자 컬럼 *", ["방문일자", "날짜", "방문날짜"])
+                    col_type  = 컬럼선택("시술종류 컬럼 *", ["시술종류", "시술", "서비스"])
+                with col2:
+                    col_prod  = 컬럼선택("사용제품 컬럼", ["사용제품", "제품"])
+                    col_price = 컬럼선택("단가 컬럼 *", ["단가", "금액", "가격", "비용"])
+                    col_memo  = 컬럼선택("메모 컬럼", ["메모", "특이사항"])
+
+                if st.button("시술 이력 가져오기", type="primary", use_container_width=True):
+                    필수 = [col_name, col_date, col_type, col_price]
+                    if "(사용안함)" in 필수:
+                        st.error("고객명, 방문일자, 시술종류, 단가 컬럼은 반드시 선택해야 합니다.")
+                    else:
+                        기존고객df = 고객_불러오기()
+                        if 기존고객df.empty:
+                            st.error("먼저 고객 명단을 등록(또는 가져오기)해주세요.")
+                        else:
+                            고객명_to_ID = dict(zip(기존고객df["고객명"], 기존고객df["고객ID"]))
+                            성공, 실패_이름없음, 실패_기타 = 0, 0, 0
+                            진행바 = st.progress(0)
+
+                            for i, row in df_upload.iterrows():
+                                이름  = str(row.get(col_name,  "")).strip()
+                                날짜  = str(row.get(col_date,  "")).strip()
+                                시술  = str(row.get(col_type,  "")).strip()
+                                가격  = str(row.get(col_price, "")).strip().replace(",", "").replace("원", "")
+                                제품  = str(row.get(col_prod,  "")).strip() if col_prod  != "(사용안함)" else ""
+                                메모v = str(row.get(col_memo,  "")).strip() if col_memo  != "(사용안함)" else ""
+
+                                if 이름 not in 고객명_to_ID:
+                                    실패_이름없음 += 1
+                                    continue
+                                try:
+                                    날짜obj = pd.to_datetime(날짜).date()
+                                    가격int = int(float(가격)) if 가격 else 0
+                                except:
+                                    실패_기타 += 1
+                                    continue
+
+                                시술이력_추가(고객명_to_ID[이름], 이름, 날짜obj, 시술, 제품, 가격int, 메모v)
+                                성공 += 1
+                                진행바.progress((i + 1) / len(df_upload))
+
+                            msg = f"가져오기 완료! ✅ 등록: {성공}건"
+                            if 실패_이름없음:
+                                msg += f"  |  ⚠️ 고객 없음(등록 필요): {실패_이름없음}건"
+                            if 실패_기타:
+                                msg += f"  |  ❌ 형식오류: {실패_기타}건"
+                            st.success(msg)
+                            st.rerun()
