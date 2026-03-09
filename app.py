@@ -8,6 +8,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, date
+from streamlit_calendar import calendar as st_calendar
 
 # ─────────────────────────────────────────────
 # Supabase REST API 설정 (supabase 라이브러리 없이 직접 호출)
@@ -172,6 +173,58 @@ def 시술이력_삭제(이력ID):
 # 데이터 함수 - 앱 설정 (비밀번호)
 # ─────────────────────────────────────────────
 
+def 예약_불러오기() -> pd.DataFrame:
+    rows = _get("reservations", {"order": "reservation_date.asc,reservation_time.asc"})
+    if not rows:
+        return pd.DataFrame(columns=["예약ID", "고객ID", "고객명", "예약일", "예약시간", "시술종류", "메모", "상태"])
+    df = pd.DataFrame(rows)
+    return df.rename(columns={
+        "reservation_id": "예약ID", "customer_id": "고객ID", "customer_name": "고객명",
+        "reservation_date": "예약일", "reservation_time": "예약시간",
+        "service_type": "시술종류", "memo": "메모", "status": "상태",
+    })[["예약ID", "고객ID", "고객명", "예약일", "예약시간", "시술종류", "메모", "상태"]]
+
+
+def 신규_예약ID() -> str:
+    rows = _get("reservations", {"select": "reservation_id"})
+    if not rows:
+        return "R001"
+    번호목록 = []
+    for r in rows:
+        try:
+            번호목록.append(int(r["reservation_id"][1:]))
+        except:
+            pass
+    return f"R{(max(번호목록) + 1):03d}" if 번호목록 else "R001"
+
+
+def 예약_추가(고객ID, 고객명, 예약일, 예약시간, 시술종류, 메모=""):
+    _post("reservations", {
+        "reservation_id":   신규_예약ID(),
+        "customer_id":      고객ID,
+        "customer_name":    고객명,
+        "reservation_date": str(예약일),
+        "reservation_time": str(예약시간),
+        "service_type":     시술종류,
+        "memo":             메모.strip(),
+        "status":           "예약",
+    })
+
+
+def 예약_수정(예약ID, 예약일, 예약시간, 시술종류, 메모, 상태):
+    _patch("reservations", {"reservation_id": 예약ID}, {
+        "reservation_date": str(예약일),
+        "reservation_time": str(예약시간),
+        "service_type":     시술종류,
+        "memo":             메모.strip(),
+        "status":           상태,
+    })
+
+
+def 예약_삭제(예약ID):
+    _delete("reservations", {"reservation_id": 예약ID})
+
+
 def _get_app_password() -> str:
     """Supabase app_settings 테이블에서 비밀번호를 가져옵니다. 없으면 secrets 기본값 사용."""
     try:
@@ -249,7 +302,7 @@ with col_logout:
 
 st.divider()
 
-탭1, 탭2, 탭3, 탭4, 탭5, 탭6, 탭7, 탭8 = st.tabs([
+탭1, 탭2, 탭3, 탭4, 탭5, 탭6, 탭7, 탭8, 탭9 = st.tabs([
     "👤 고객 등록",
     "✂️ 시술 이력 등록",
     "🔍 개인별 조회",
@@ -258,6 +311,7 @@ st.divider()
     "⚙️ 시술종류 관리",
     "📱 단체문자",
     "📥 데이터 가져오기",
+    "📅 예약 관리",
 ])
 
 
@@ -862,3 +916,153 @@ with 탭8:
                                 msg += f"  |  ❌ 형식오류: {실패_기타}건"
                             st.success(msg)
                             st.rerun()
+
+
+# ════════════════════════════════════════════
+# 탭9: 예약 관리
+# ════════════════════════════════════════════
+with 탭9:
+    st.subheader("📅 예약 관리")
+
+    df_c   = 고객_불러오기()
+    df_rsv = 예약_불러오기()
+    시술목록  = 시술종류_불러오기()
+
+    # ── 캘린더 뷰 ──
+    st.subheader("예약 캘린더")
+
+    상태색상 = {"예약": "#4A90D9", "완료": "#27AE60", "취소": "#E74C3C"}
+    이벤트목록 = []
+    if not df_rsv.empty:
+        for _, r in df_rsv.iterrows():
+            이벤트목록.append({
+                "title": f"{r['예약시간']} {r['고객명']} ({r['시술종류']})",
+                "start": f"{r['예약일']}T{r['예약시간']}",
+                "color": 상태색상.get(r["상태"], "#4A90D9"),
+                "extendedProps": {"예약ID": r["예약ID"], "상태": r["상태"]},
+            })
+
+    캘린더옵션 = {
+        "headerToolbar": {
+            "left":   "prev,next today",
+            "center": "title",
+            "right":  "dayGridMonth,timeGridWeek,listWeek",
+        },
+        "initialView": "dayGridMonth",
+        "locale": "ko",
+        "height": 600,
+        "selectable": True,
+        "editable": False,
+    }
+
+    st_calendar(events=이벤트목록, options=캘린더옵션, key="예약캘린더")
+
+    st.caption("🔵 예약  🟢 완료  🔴 취소")
+
+    st.divider()
+
+    # ── 예약 등록 ──
+    st.subheader("신규 예약 등록")
+
+    if df_c.empty:
+        st.warning("먼저 고객 등록 탭에서 고객을 등록해주세요.")
+    else:
+        검색어rsv = st.text_input("고객 이름 검색", placeholder="이름 입력", key="예약검색")
+        필터rsv = df_c[df_c["고객명"].str.contains(검색어rsv.strip(), na=False)] if 검색어rsv.strip() else df_c
+
+        if not 필터rsv.empty:
+            고객옵션rsv = {
+                f"{r['고객명']} ({r['고객ID']})": (r["고객ID"], r["고객명"])
+                for _, r in 필터rsv.iterrows()
+            }
+            with st.form("예약등록폼", clear_on_submit=True):
+                선택rsv = st.selectbox("고객 선택 *", list(고객옵션rsv.keys()))
+                col1, col2 = st.columns(2)
+                with col1:
+                    예약일 = st.date_input("예약 날짜 *", value=date.today())
+                    시술rsv = st.selectbox("시술 종류 *", 시술목록)
+                with col2:
+                    시간옵션 = [f"{h:02d}:{m:02d}" for h in range(9, 21) for m in (0, 30)]
+                    예약시간 = st.selectbox("예약 시간 *", 시간옵션, index=시간옵션.index("10:00"))
+                    메모rsv = st.text_input("메모", placeholder="특이사항 등")
+                등록rsv = st.form_submit_button("예약 등록", type="primary", use_container_width=True)
+
+            if 등록rsv:
+                고객ID_rsv, 고객명_rsv = 고객옵션rsv[선택rsv]
+                예약_추가(고객ID_rsv, 고객명_rsv, 예약일, 예약시간, 시술rsv, 메모rsv)
+                st.success(f"'{고객명_rsv}' 님 {예약일} {예약시간} 예약이 등록되었습니다!")
+                st.rerun()
+
+    st.divider()
+
+    # ── 예약 목록 및 수정/삭제 ──
+    st.subheader("예약 목록 수정 / 삭제")
+
+    df_rsv2 = 예약_불러오기()
+    if df_rsv2.empty:
+        st.info("등록된 예약이 없습니다.")
+    else:
+        # 필터
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            필터상태 = st.multiselect("상태 필터", ["예약", "완료", "취소"], default=["예약"])
+        with col_f2:
+            검색rsv2 = st.text_input("고객명 검색", key="예약목록검색")
+
+        보기df = df_rsv2.copy()
+        if 필터상태:
+            보기df = 보기df[보기df["상태"].isin(필터상태)]
+        if 검색rsv2.strip():
+            보기df = 보기df[보기df["고객명"].str.contains(검색rsv2.strip(), na=False)]
+
+        st.dataframe(
+            보기df[["예약ID", "예약일", "예약시간", "고객명", "시술종류", "상태", "메모"]],
+            use_container_width=True, hide_index=True,
+        )
+        st.caption(f"총 {len(보기df)}건")
+
+        st.divider()
+        st.subheader("예약 수정 / 삭제")
+
+        if not df_rsv2.empty:
+            예약옵션 = {
+                f"{r['예약ID']} | {r['예약일']} {r['예약시간']} | {r['고객명']} | {r['상태']}": r["예약ID"]
+                for _, r in df_rsv2.iterrows()
+            }
+            선택예약라벨 = st.selectbox("수정/삭제할 예약 선택", list(예약옵션.keys()))
+            선택예약ID  = 예약옵션[선택예약라벨]
+            원본rsv     = df_rsv2[df_rsv2["예약ID"] == 선택예약ID].iloc[0]
+
+            with st.form("예약수정폼"):
+                st.caption(f"예약ID: {선택예약ID}  |  고객: {원본rsv['고객명']}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    수정_예약일 = st.date_input(
+                        "예약 날짜",
+                        value=datetime.strptime(str(원본rsv["예약일"])[:10], "%Y-%m-%d").date(),
+                    )
+                    시간옵션2  = [f"{h:02d}:{m:02d}" for h in range(9, 21) for m in (0, 30)]
+                    현재시간   = str(원본rsv["예약시간"])[:5]
+                    시간idx    = 시간옵션2.index(현재시간) if 현재시간 in 시간옵션2 else 0
+                    수정_시간  = st.selectbox("예약 시간", 시간옵션2, index=시간idx)
+                with col2:
+                    현재시술rsv   = str(원본rsv["시술종류"])
+                    수정_시술목록 = 시술목록 if 현재시술rsv in 시술목록 else [현재시술rsv] + 시술목록
+                    수정_시술     = st.selectbox("시술 종류", 수정_시술목록, index=수정_시술목록.index(현재시술rsv))
+                    수정_상태     = st.selectbox("상태", ["예약", "완료", "취소"],
+                                               index=["예약", "완료", "취소"].index(원본rsv["상태"]))
+                수정_메모rsv = st.text_input("메모", value=str(원본rsv["메모"]) if pd.notna(원본rsv["메모"]) else "")
+
+                col_저장, col_삭제 = st.columns(2)
+                수정rsv저장 = col_저장.form_submit_button("수정 저장", type="primary", use_container_width=True)
+                삭제rsv확인 = col_삭제.form_submit_button("예약 삭제", type="secondary", use_container_width=True)
+
+            if 수정rsv저장:
+                예약_수정(선택예약ID, 수정_예약일, 수정_시간, 수정_시술, 수정_메모rsv, 수정_상태)
+                st.success(f"{선택예약ID} 예약이 수정되었습니다!")
+                st.rerun()
+
+            if 삭제rsv확인:
+                예약_삭제(선택예약ID)
+                st.success(f"{선택예약ID} 예약이 삭제되었습니다.")
+                st.rerun()

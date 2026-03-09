@@ -42,14 +42,28 @@ insert into treatment_types (type_name, sort_order) values
   ('제모', 9), ('눈썹 정리', 10), ('기타', 11)
 on conflict (type_name) do nothing;
 
--- 5. 앱 설정 테이블 (비밀번호 등 설정값 저장)
+-- 5. 예약 테이블
+create table if not exists reservations (
+  id               bigserial primary key,
+  reservation_id   text unique not null,
+  customer_id      text not null,
+  customer_name    text default '',
+  reservation_date text default '',
+  reservation_time text default '10:00',
+  service_type     text default '',
+  memo             text default '',
+  status           text default '예약'
+);
+
+-- 6. 앱 설정 테이블 (비밀번호 등 설정값 저장)
 create table if not exists app_settings (
   key   text primary key,
   value text default ''
 );
 
--- 6. RLS 비활성화 (개인 매장 전용 앱)
+-- 7. RLS 비활성화 (개인 매장 전용 앱)
 alter table customers       disable row level security;
 alter table treatments      disable row level security;
 alter table treatment_types disable row level security;
 alter table app_settings    disable row level security;
+alter table reservations    disable row level security;
