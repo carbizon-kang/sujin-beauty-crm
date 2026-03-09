@@ -8,7 +8,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, date
-from streamlit_calendar import calendar as st_calendar
+import calendar as cal_module
 
 # ─────────────────────────────────────────────
 # Supabase REST API 설정 (supabase 라이브러리 없이 직접 호출)
@@ -948,34 +948,78 @@ with 탭9:
 
     # ── 캘린더 뷰 ──
     st.subheader("예약 캘린더")
-
-    상태색상 = {"예약": "#4A90D9", "완료": "#27AE60", "취소": "#E74C3C"}
-    이벤트목록 = []
-    if not df_rsv.empty:
-        for _, r in df_rsv.iterrows():
-            이벤트목록.append({
-                "title": f"{r['예약시간']} {r['고객명']} ({r['시술종류']})",
-                "start": f"{r['예약일']}T{r['예약시간']}",
-                "color": 상태색상.get(r["상태"], "#4A90D9"),
-                "extendedProps": {"예약ID": r["예약ID"], "상태": r["상태"]},
-            })
-
-    캘린더옵션 = {
-        "headerToolbar": {
-            "left":   "prev,next today",
-            "center": "title",
-            "right":  "dayGridMonth,timeGridWeek,listWeek",
-        },
-        "initialView": "dayGridMonth",
-        "locale": "ko",
-        "height": 600,
-        "selectable": True,
-        "editable": False,
-    }
-
-    st_calendar(events=이벤트목록, options=캘린더옵션, key="예약캘린더")
-
     st.caption("🔵 예약  🟢 완료  🔴 취소")
+
+    # 연도/월 선택
+    오늘 = date.today()
+    col_y, col_m, _ = st.columns([1, 1, 3])
+    with col_y:
+        선택연도cal = st.selectbox("연도", list(range(오늘.year - 1, 오늘.year + 3)), index=1, key="cal_year")
+    with col_m:
+        선택월cal = st.selectbox("월", list(range(1, 13)), index=오늘.month - 1,
+                               format_func=lambda x: f"{x}월", key="cal_month")
+
+    # 해당 월의 예약 필터
+    월prefix = f"{선택연도cal}-{선택월cal:02d}"
+    월예약 = df_rsv[df_rsv["예약일"].str.startswith(월prefix)].copy() if not df_rsv.empty else pd.DataFrame()
+
+    # 날짜별 예약 dict 생성
+    날짜별예약 = {}
+    if not 월예약.empty:
+        for _, r in 월예약.iterrows():
+            d = str(r["예약일"])
+            날짜별예약.setdefault(d, []).append(r)
+
+    # 캘린더 그리드 출력
+    요일헤더 = ["월", "화", "수", "목", "금", "토", "일"]
+    cols_h = st.columns(7)
+    for i, 요일 in enumerate(요일헤더):
+        색 = "#FF4B4B" if 요일 == "일" else "#4B7BFF" if 요일 == "토" else "#333"
+        cols_h[i].markdown(f"<div style='text-align:center;font-weight:bold;color:{색}'>{요일}</div>", unsafe_allow_html=True)
+
+    # 월 첫날 요일(월=0) 및 전체 날짜 계산
+    첫날요일, 총일수 = cal_module.monthrange(선택연도cal, 선택월cal)
+    칸목록 = [None] * 첫날요일 + list(range(1, 총일수 + 1))
+    나머지 = (7 - len(칸목록) % 7) % 7
+    칸목록 += [None] * 나머지
+
+    상태이모지 = {"예약": "🔵", "완료": "🟢", "취소": "🔴"}
+
+    for 주idx in range(len(칸목록) // 7):
+        주칸 = st.columns(7)
+        for 요일idx in range(7):
+            일 = 칸목록[주idx * 7 + 요일idx]
+            with 주칸[요일idx]:
+                if 일 is None:
+                    st.markdown("<div style='min-height:70px'></div>", unsafe_allow_html=True)
+                else:
+                    날짜key = f"{선택연도cal}-{선택월cal:02d}-{일:02d}"
+                    오늘강조 = "background:#FFF3CD;border-radius:6px;padding:2px;" if 날짜key == str(오늘) else ""
+                    요일색 = "#FF4B4B" if 요일idx == 6 else "#4B7BFF" if 요일idx == 5 else "#333"
+                    st.markdown(
+                        f"<div style='text-align:center;font-weight:bold;color:{요일색};{오늘강조}'>{일}</div>",
+                        unsafe_allow_html=True
+                    )
+                    if 날짜key in 날짜별예약:
+                        for r in 날짜별예약[날짜key]:
+                            이모지 = 상태이모지.get(r["상태"], "🔵")
+                            st.markdown(
+                                f"<div style='font-size:11px;background:#EEF4FF;border-radius:4px;padding:2px 4px;margin:1px 0;overflow:hidden'>"
+                                f"{이모지} {r['예약시간'][:5]} {r['고객명']}</div>",
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.markdown("<div style='min-height:40px'></div>", unsafe_allow_html=True)
+
+    st.divider()
+
+    # 이번 달 예약 요약 테이블
+    if not 월예약.empty:
+        st.markdown(f"**{선택연도cal}년 {선택월cal}월 예약 현황 ({len(월예약)}건)**")
+        st.dataframe(
+            월예약[["예약일", "예약시간", "고객명", "시술종류", "상태", "메모"]].sort_values(["예약일", "예약시간"]),
+            use_container_width=True, hide_index=True,
+        )
 
     st.divider()
 
