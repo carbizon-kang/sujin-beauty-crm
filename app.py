@@ -120,8 +120,16 @@ def 신규_고객ID() -> str:
 
 
 def 전화번호_포맷(번호: str) -> str:
-    """숫자만 추출 후 한국 전화번호 형식(010-xxxx-xxxx)으로 변환"""
+    """숫자만 추출 후 한국 전화번호 형식(010-xxxx-xxxx)으로 변환
+    엑셀에서 앞자리 0이 사라진 경우(예: 1012345678) 자동으로 0을 붙임"""
+    # .0 제거 (엑셀이 숫자로 저장 시 10123456789.0 형태가 될 수 있음)
+    번호 = str(번호).split('.')[0].strip()
     digits = ''.join(filter(str.isdigit, 번호))
+    # 앞자리 0이 빠진 경우 복원 (10으로 시작하는 10자리 → 010, 1x로 시작하는 10자리 → 0 추가)
+    if len(digits) == 10 and digits.startswith('10'):
+        digits = '0' + digits  # 01012345678
+    elif len(digits) == 9 and not digits.startswith('0'):
+        digits = '0' + digits  # 02xxxxxxxx 등
     if len(digits) == 11:  # 010-xxxx-xxxx
         return f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
     elif len(digits) == 10:  # 02-xxxx-xxxx 또는 0xx-xxx-xxxx
@@ -129,7 +137,7 @@ def 전화번호_포맷(번호: str) -> str:
             return f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
         else:
             return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
-    return 번호  # 형식이 맞지 않으면 입력값 그대로 반환
+    return digits if digits else 번호  # 형식이 맞지 않으면 숫자만 반환
 
 
 def 고객_추가(고객명, 휴대폰번호, 성별="", 나이대="", 메모=""):
@@ -917,7 +925,7 @@ with 탭8:
                         등록시각 = datetime.now().strftime("%Y-%m-%d %H:%M")
                         for _, row in df_upload.iterrows():
                             이름 = str(row.get(col_name, "")).strip()
-                            번호 = str(row.get(col_phone, "")).strip()
+                            번호 = 전화번호_포맷(str(row.get(col_phone, "")).strip())
                             if not 이름 or not 번호:
                                 실패 += 1
                                 continue
