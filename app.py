@@ -337,7 +337,14 @@ with 탭1:
     # 폼 초기화용 카운터 (key에 숫자를 붙여 위젯을 새로 생성)
     if "cust_form_idx" not in st.session_state:
         st.session_state.cust_form_idx = 0
+    if "cust_success_msg" not in st.session_state:
+        st.session_state.cust_success_msg = ""
     fi = st.session_state.cust_form_idx  # 현재 폼 인덱스
+
+    # 이전 등록 완료 메시지 표시
+    if st.session_state.cust_success_msg:
+        st.success(st.session_state.cust_success_msg)
+        st.session_state.cust_success_msg = ""
 
     # 전화번호 입력 시 실시간 하이픈 자동 포맷 (on_change 사용)
     def _phone_on_change():
@@ -380,10 +387,10 @@ with 탭1:
                      st.session_state.get(f"cust_gender_{fi}", "미입력"),
                      st.session_state.get(f"cust_age_{fi}", "미입력"),
                      st.session_state.get(f"cust_memo_{fi}", "").strip())
-            st.success(f"고객 등록 완료! ({_name} / {_phone})")
-            st.balloons()
-            # 카운터 증가 → 다음 rerun에서 새 key로 빈 위젯 생성
+            # 완료 메시지를 session_state에 저장 후 rerun (rerun 후에도 메시지 유지)
+            st.session_state.cust_success_msg = f"고객 등록 완료! ({_name} / {_phone})"
             st.session_state.cust_form_idx += 1
+            st.balloons()
             st.rerun()
 
 
