@@ -334,34 +334,40 @@ st.divider()
 with 탭1:
     st.subheader("신규 고객 등록")
 
+    # 폼 초기화용 카운터 (key에 숫자를 붙여 위젯을 새로 생성)
+    if "cust_form_idx" not in st.session_state:
+        st.session_state.cust_form_idx = 0
+    fi = st.session_state.cust_form_idx  # 현재 폼 인덱스
+
     # 전화번호 입력 시 실시간 하이픈 자동 포맷 (on_change 사용)
     def _phone_on_change():
-        val = st.session_state.get("cust_phone", "")
+        key = f"cust_phone_{st.session_state.cust_form_idx}"
+        val = st.session_state.get(key, "")
         digits = ''.join(filter(str.isdigit, val))
         if len(digits) == 11:
-            st.session_state.cust_phone = f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+            st.session_state[key] = f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
         elif len(digits) == 10:
             if digits.startswith('02'):
-                st.session_state.cust_phone = f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
+                st.session_state[key] = f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
             else:
-                st.session_state.cust_phone = f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+                st.session_state[key] = f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
 
     col1, col2 = st.columns(2)
     with col1:
-        고객명 = st.text_input("고객 이름 *", key="cust_name", placeholder="예: 홍길동")
+        고객명 = st.text_input("고객 이름 *", key=f"cust_name_{fi}", placeholder="예: 홍길동")
     with col2:
-        휴대폰번호 = st.text_input("휴대폰 번호 *", key="cust_phone",
+        휴대폰번호 = st.text_input("휴대폰 번호 *", key=f"cust_phone_{fi}",
                                  on_change=_phone_on_change, placeholder="예: 010-1234-5678")
     col3, col4 = st.columns(2)
     with col3:
-        성별 = st.radio("성별", ["여", "남", "미입력"], horizontal=True, key="cust_gender")
+        성별 = st.radio("성별", ["여", "남", "미입력"], horizontal=True, key=f"cust_gender_{fi}")
     with col4:
-        나이대 = st.selectbox("나이대", ["미입력", "10대", "20대", "30대", "40대", "50대", "60대 이상"], key="cust_age")
-    메모 = st.text_area("메모 (특이사항, 선호 스타일 등)", height=80, key="cust_memo")
+        나이대 = st.selectbox("나이대", ["미입력", "10대", "20대", "30대", "40대", "50대", "60대 이상"], key=f"cust_age_{fi}")
+    메모 = st.text_area("메모 (특이사항, 선호 스타일 등)", height=80, key=f"cust_memo_{fi}")
 
     if st.button("고객 등록", use_container_width=True, type="primary", key="cust_submit"):
-        _name = st.session_state.get("cust_name", "").strip()
-        _phone = st.session_state.get("cust_phone", "").strip()
+        _name  = st.session_state.get(f"cust_name_{fi}", "").strip()
+        _phone = st.session_state.get(f"cust_phone_{fi}", "").strip()
         _digits = ''.join(filter(str.isdigit, _phone))
         if not _name:
             st.error("고객 이름을 입력해주세요.")
@@ -371,14 +377,13 @@ with 탭1:
             st.error("올바른 전화번호를 입력해주세요. 예: 010-1234-5678 또는 01012345678")
         else:
             고객_추가(_name, _phone,
-                     st.session_state.get("cust_gender", "미입력"),
-                     st.session_state.get("cust_age", "미입력"),
-                     st.session_state.get("cust_memo", "").strip())
+                     st.session_state.get(f"cust_gender_{fi}", "미입력"),
+                     st.session_state.get(f"cust_age_{fi}", "미입력"),
+                     st.session_state.get(f"cust_memo_{fi}", "").strip())
             st.success(f"고객 등록 완료! ({_name} / {_phone})")
-            # 입력 필드 초기화
-            for k in ["cust_name", "cust_phone", "cust_memo"]:
-                st.session_state[k] = ""
             st.balloons()
+            # 카운터 증가 → 다음 rerun에서 새 key로 빈 위젯 생성
+            st.session_state.cust_form_idx += 1
             st.rerun()
 
 
