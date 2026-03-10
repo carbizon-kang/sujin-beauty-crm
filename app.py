@@ -686,15 +686,40 @@ with 탭5:
             )
             리스트 = 리스트[마스크]
 
-        표시 = 리스트[["고객ID", "고객명", "휴대폰번호", "방문횟수", "마지막방문", "누적매출", "등록일시", "메모"]]
-        st.dataframe(표시, use_container_width=True, hide_index=True,
+        표시 = 리스트[["고객ID", "고객명", "휴대폰번호", "방문횟수", "마지막방문", "누적매출", "등록일시", "메모"]].copy()
+        표시.insert(0, "선택", False)  # 체크박스 컬럼 추가
+
+        편집df = st.data_editor(
+            표시,
+            use_container_width=True,
+            hide_index=True,
             column_config={
+                "선택":   st.column_config.CheckboxColumn("선택", default=False),
                 "누적매출": st.column_config.NumberColumn("누적매출(원)", format="%d원"),
                 "방문횟수": st.column_config.NumberColumn("방문횟수", format="%d회"),
-            })
-        st.caption(f"총 {len(표시)}명")
+                "고객ID": st.column_config.TextColumn("고객ID", disabled=True),
+                "고객명": st.column_config.TextColumn("고객명", disabled=True),
+                "휴대폰번호": st.column_config.TextColumn("휴대폰번호", disabled=True),
+                "방문횟수": st.column_config.NumberColumn("방문횟수", disabled=True),
+                "마지막방문": st.column_config.TextColumn("마지막방문", disabled=True),
+                "누적매출": st.column_config.NumberColumn("누적매출(원)", format="%d원", disabled=True),
+                "등록일시": st.column_config.TextColumn("등록일시", disabled=True),
+                "메모": st.column_config.TextColumn("메모", disabled=True),
+            },
+            key="고객리스트_에디터"
+        )
+        st.caption(f"총 {len(표시) - 1 if len(표시) > 0 else 0}명")  # 헤더 제외
 
-        csv = 표시.to_csv(index=False).encode("utf-8-sig")
+        선택된행 = 편집df[편집df["선택"] == True]
+        if not 선택된행.empty:
+            st.warning(f"⚠️ {len(선택된행)}명 선택됨: {', '.join(선택된행['고객명'].tolist())}")
+            if st.button(f"🗑️ 선택 고객 {len(선택된행)}명 삭제", type="primary", key="고객삭제버튼"):
+                for _, r in 선택된행.iterrows():
+                    _delete("customers", {"customer_id": r["고객ID"]})
+                st.success(f"{len(선택된행)}명 삭제 완료!")
+                st.rerun()
+
+        csv = 표시.drop(columns=["선택"]).to_csv(index=False).encode("utf-8-sig")
         st.download_button("전체 리스트 CSV 다운로드", data=csv,
             file_name=f"수진뷰티_전체고객_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv")
