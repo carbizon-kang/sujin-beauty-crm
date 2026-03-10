@@ -28,7 +28,8 @@ def _get(table: str, params: dict = None) -> list:
     res = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=_headers(), params=params)
     return res.json() if res.ok else []
 
-def _post(table: str, data: dict) -> dict:
+def _post(table: str, data) -> dict:
+    """단건 또는 리스트 일괄 insert"""
     res = requests.post(f"{SUPABASE_URL}/rest/v1/{table}", headers=_headers(), json=data)
     return res.json()
 
@@ -880,25 +881,53 @@ with 탭8:
                     else:
                         성공, 실패, 중복 = 0, 0, 0
                         기존고객 = 고객_불러오기()
-                        기존번호목록 = 기존고객["휴대폰번호"].tolist() if not 기존고객.empty else []
+                        기존번호set = set(기존고객["휴대폰번호"].tolist()) if not 기존고객.empty else set()
 
-                        진행바 = st.progress(0)
-                        for i, row in df_upload.iterrows():
+                        # 현재 최대 ID 번호 계산 (배치 처리를 위해 미리 가져옴)
+                        기존rows = _get("customers", {"select": "customer_id"})
+                        번호목록 = []
+                        for r in 기존rows:
+                            try:
+                                번호목록.append(int(r["customer_id"][1:]))
+                            except:
+                                pass
+                        다음ID번호 = (max(번호목록) + 1) if 번호목록 else 1
+
+                        # 등록할 레코드 미리 준비
+                        배치 = []
+                        등록시각 = datetime.now().strftime("%Y-%m-%d %H:%M")
+                        for _, row in df_upload.iterrows():
                             이름 = str(row.get(col_name, "")).strip()
                             번호 = str(row.get(col_phone, "")).strip()
                             if not 이름 or not 번호:
                                 실패 += 1
                                 continue
-                            if 번호 in 기존번호목록:
+                            if 번호 in 기존번호set:
                                 중복 += 1
                                 continue
                             성별v  = str(row.get(col_gender, "")).strip() if col_gender != "(사용안함)" else ""
                             나이대v = str(row.get(col_age,   "")).strip() if col_age    != "(사용안함)" else ""
                             메모v   = str(row.get(col_memo,  "")).strip() if col_memo   != "(사용안함)" else ""
-                            고객_추가(이름, 번호, 성별v, 나이대v, 메모v)
-                            기존번호목록.append(번호)
-                            성공 += 1
-                            진행바.progress((i + 1) / len(df_upload))
+                            배치.append({
+                                "customer_id":   f"C{다음ID번호:03d}",
+                                "name":          이름,
+                                "phone":         번호,
+                                "gender":        성별v,
+                                "age_group":     나이대v,
+                                "registered_at": 등록시각,
+                                "memo":          메모v,
+                            })
+                            기존번호set.add(번호)
+                            다음ID번호 += 1
+
+                        # 500명씩 나눠서 배치 insert
+                        CHUNK = 500
+                        진행바 = st.progress(0)
+                        전체 = len(배치)
+                        for i in range(0, 전체, CHUNK):
+                            _post("customers", 배치[i:i+CHUNK])
+                            성공 += len(배치[i:i+CHUNK])
+                            진행바.progress(min((i + CHUNK) / 전체, 1.0))
 
                         st.success(f"가져오기 완료! ✅ 등록: {성공}명  |  ⚠️ 중복 건너뜀: {중복}명  |  ❌ 실패: {실패}명")
                         st.rerun()
