@@ -25,8 +25,27 @@ def _headers():
     }
 
 def _get(table: str, params: dict = None) -> list:
-    res = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=_headers(), params=params)
-    return res.json() if res.ok else []
+    """Supabase 기본 1000행 제한을 우회하여 전체 데이터 페이지네이션으로 가져오기"""
+    params = params or {}
+    # limit 파라미터가 명시된 경우 그대로 단건 요청
+    if "limit" in params:
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=_headers(), params=params)
+        return res.json() if res.ok else []
+    # 전체 조회: 1000개씩 페이지네이션
+    결과 = []
+    offset = 0
+    PAGE = 1000
+    while True:
+        p = {**params, "limit": PAGE, "offset": offset}
+        res = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=_headers(), params=p)
+        if not res.ok:
+            break
+        rows = res.json()
+        결과.extend(rows)
+        if len(rows) < PAGE:
+            break
+        offset += PAGE
+    return 결과
 
 def _post(table: str, data) -> dict:
     """단건 또는 리스트 일괄 insert"""
