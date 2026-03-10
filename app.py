@@ -374,21 +374,13 @@ with 탭1:
                      st.session_state.get("cust_gender", "미입력"),
                      st.session_state.get("cust_age", "미입력"),
                      st.session_state.get("cust_memo", "").strip())
-            st.success(f"'{_name}' 고객이 등록되었습니다! (번호: {_phone})")
+            st.success(f"고객 등록 완료! ({_name} / {_phone})")
             # 입력 필드 초기화
             for k in ["cust_name", "cust_phone", "cust_memo"]:
                 st.session_state[k] = ""
             st.balloons()
             st.rerun()
 
-    st.divider()
-    st.subheader("등록된 고객 현황")
-    df_c = 고객_불러오기()
-    if df_c.empty:
-        st.info("아직 등록된 고객이 없습니다.")
-    else:
-        st.dataframe(df_c, use_container_width=True, hide_index=True)
-        st.caption(f"총 {len(df_c)}명 등록됨")
 
 
 # ════════════════════════════════════════════
