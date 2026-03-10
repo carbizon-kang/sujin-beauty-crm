@@ -334,34 +334,52 @@ st.divider()
 with 탭1:
     st.subheader("신규 고객 등록")
 
-    with st.form("고객등록폼", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            고객명 = st.text_input("고객 이름 *", placeholder="예: 홍길동")
-        with col2:
-            휴대폰번호 = st.text_input("휴대폰 번호 *", placeholder="예: 010-1234-5678")
-        col3, col4 = st.columns(2)
-        with col3:
-            성별 = st.radio("성별", ["여", "남", "미입력"], horizontal=True)
-        with col4:
-            나이대 = st.selectbox("나이대", ["미입력", "10대", "20대", "30대", "40대", "50대", "60대 이상"])
-        메모 = st.text_area("메모 (특이사항, 선호 스타일 등)", height=80)
-        저장 = st.form_submit_button("고객 등록", use_container_width=True, type="primary")
-
-    if 저장:
-        if not 고객명.strip():
-            st.error("고객 이름을 입력해주세요.")
-        elif not 휴대폰번호.strip():
-            st.error("휴대폰 번호를 입력해주세요.")
-        else:
-            포맷번호 = 전화번호_포맷(휴대폰번호)
-            digits = ''.join(filter(str.isdigit, 휴대폰번호))
-            if len(digits) not in (10, 11):
-                st.error("올바른 전화번호를 입력해주세요. 예: 010-1234-5678 또는 01012345678")
+    # 전화번호 입력 시 실시간 하이픈 자동 포맷 (on_change 사용)
+    def _phone_on_change():
+        val = st.session_state.get("cust_phone", "")
+        digits = ''.join(filter(str.isdigit, val))
+        if len(digits) == 11:
+            st.session_state.cust_phone = f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+        elif len(digits) == 10:
+            if digits.startswith('02'):
+                st.session_state.cust_phone = f"{digits[:2]}-{digits[2:6]}-{digits[6:]}"
             else:
-                고객_추가(고객명, 포맷번호, 성별, 나이대, 메모)
-                st.success(f"'{고객명}' 고객이 등록되었습니다! (번호: {포맷번호})")
-                st.balloons()
+                st.session_state.cust_phone = f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+
+    col1, col2 = st.columns(2)
+    with col1:
+        고객명 = st.text_input("고객 이름 *", key="cust_name", placeholder="예: 홍길동")
+    with col2:
+        휴대폰번호 = st.text_input("휴대폰 번호 *", key="cust_phone",
+                                 on_change=_phone_on_change, placeholder="예: 010-1234-5678")
+    col3, col4 = st.columns(2)
+    with col3:
+        성별 = st.radio("성별", ["여", "남", "미입력"], horizontal=True, key="cust_gender")
+    with col4:
+        나이대 = st.selectbox("나이대", ["미입력", "10대", "20대", "30대", "40대", "50대", "60대 이상"], key="cust_age")
+    메모 = st.text_area("메모 (특이사항, 선호 스타일 등)", height=80, key="cust_memo")
+
+    if st.button("고객 등록", use_container_width=True, type="primary", key="cust_submit"):
+        _name = st.session_state.get("cust_name", "").strip()
+        _phone = st.session_state.get("cust_phone", "").strip()
+        _digits = ''.join(filter(str.isdigit, _phone))
+        if not _name:
+            st.error("고객 이름을 입력해주세요.")
+        elif not _phone:
+            st.error("휴대폰 번호를 입력해주세요.")
+        elif len(_digits) not in (10, 11):
+            st.error("올바른 전화번호를 입력해주세요. 예: 010-1234-5678 또는 01012345678")
+        else:
+            고객_추가(_name, _phone,
+                     st.session_state.get("cust_gender", "미입력"),
+                     st.session_state.get("cust_age", "미입력"),
+                     st.session_state.get("cust_memo", "").strip())
+            st.success(f"'{_name}' 고객이 등록되었습니다! (번호: {_phone})")
+            # 입력 필드 초기화
+            for k in ["cust_name", "cust_phone", "cust_memo"]:
+                st.session_state[k] = ""
+            st.balloons()
+            st.rerun()
 
     st.divider()
     st.subheader("등록된 고객 현황")
